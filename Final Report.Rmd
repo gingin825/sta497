@@ -1,0 +1,268 @@
+---
+title: "Pattern of Relapse & Sruvival Time in Small Cell Lung Cancer: Comparing Patients with Different Amount of Weight Loss"
+author: "Yu-Chun Chien"
+date: "12/26/2021"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+```{r, include = F, echo = F}
+library(tidyverse)
+library(survival)
+library(ggplot2)
+library(dplyr)
+#install.packages("survminer")
+library(survminer)
+#install.packages("table1")
+#install.packages("boot")
+library(boot)
+library(table1)
+#install.packages("printr")
+library(printr, quietly = T)
+#install.packages("kableExtra")
+library(kableExtra)
+```
+# I. Abstract
+
+|     Cancer patients often experience weight loss, which is a side effect of the cancer treatments and might be reflective of body condition. This study utilized the same dataset used in Ellis et al.'s (2021) study and investigate the relationship between weight loss and both survival time and relapse pattern of SCLC patients. Survival analysis was used to model the survival time of the patients while the description of treatment received and relapse pattern were summarized by tables. The results demonstrated that patients with higher amount of weight have shorter survival time. However, there is no significant relationship between weight loss a pattern of relapse. To make further causal inference, more research is needed in order to make better treatment decisions based on the body condition of the patients.  
+
+# II. Introduction
+  
+|     Ellis et al. (2021) compared the pattern of thoracic and central nervous system (CNS) relapse in Small Cell Lung Cancer (CNS) and found out that thoracic relapse is more common than CNS relapse. In their analysis, they compared the types of treatment received and the relapse pattern based on different stages of the disease. In particular, they stratified the analysis based on limited and extended stage of the disease, where limited stage means when the site of metastases is only in the lung while extended stage means when the sites of metastases is in the lung and some other organs such as brain or liver. Since the metastases could already be found in sites other than lungs, patients in the extensive stage were more likely to lose more weight and die, and are prone to thoracic and CNS relapse. 
+
+|     People with cancer often have weight loss, and weight loss due to cancer is termed cachexia (Weight Loss, 2012). Cachexia often results from appetite loss due to some side effects caused by cancer treatment such as difficulty chewing, loss of taste, depression, and changes in metabolism (Weight Loss, 2012). Weight loss seemed to be reflective of the patients' body condition; patients who have worse conditions as a result of the severity of the cancer or the number and frequency of treatment received might have bigger weight loss. In the case of SCLC, more weight loss might imply that the patients received more treatment, have shorter survival time, and have a higher rate of both thoracic and CNS relapse. 
+
+|     Thus, in this paper, similar analysis methods are used to investigate the relapse rate, overall survival time, and treatments received of the SCLC patients. This includes survival analysis and the comparison of basic descriptive statistics. However, instead of comparing patients in extensive stage and patients in limited stage, patients who have more than 5% weight loss are compared to patients who have less than 5% weight loss. It is hypothesized that since the amount of weight loss might reflect the severity of the cancer, patients with more weight loss will have shorter overall survival time and progression free survival time. In addition, they might have a higher rate of  both thoracic and CNS relapse. 
+  
+# III. Data & Methods
+
+|      This paper utilized the same dataset used in the study done by Ellis et al. (2021), where they conducted survival analysis and multivariate analysis to compare the risk of thoracic and central nervous system (CNS) relapse for small cell lung cancer (SCLC) when undergoing different treatment. The list of patients was obtained by searching the institutional electronic database to obtain only the patients with SCLC, while the data of the patients was obtained through medical record as well as hospital laboratory and radiology databases. The original dataset consists of 229 observations with 52 variables, including basic demographic information such as age and gender, the conditions of the disease and treatments received, and the pattern of relapse as well as overall survival time.
+
+|     The outcomes of interest in this paper is the description of patterns of relapse as well as overall and progression free survival time (OS & PFS). The data is showed by the overall pattern as well as by stratifying according to the amount of weight loss of the patients (<5% vs. >5%). PFS was the time from diagnosis to documented relapse or death, while OS was the time from diagnosis to death (Ellis et al., 2021). To compare the basic characteristics, treatment, survival time, and patterns of relapse, 29 variables were used, which will be summarized and analyzed later in the result section. 
+
+|     In addition to using the original dataset, the data was cleaned before further analysis. First, the variable "Dead" was created by reverse coding the variable "Alive", such that 1 represent that the patient was dead while 0 represent that the patient was alive. Second, time until thoracic relapse was extracted from "TTRelapse", to a new variable "TTRelapse_Tho" in order to model the thoracic relapse. 
+
+|     All data cleaning, manipulation, and analysis was done using R. Variables were presented in frequency table and was presented by the patient groups stratified by amount of weight loss as well as by the entire population. Three frequency table were produced, including one for patient basic characteristics, one for treatments received, and one for the pattern of relapse. Furthermore, OS and PFS were modeled using the Kaplan-Meier method which is non-parametric and requires no assumption of the data distribution. Patients who were alive at the time of last follow up were censored. 
+
+# IV. Results
+
+
+```{r, include=FALSE, echo=FALSE, message=F, warning=FALSE}
+# read data
+o_data <- read.csv("PE.csv", header = T)
+
+o_data$Dead <- o_data$Alive - 1
+o_data$Dead <- abs(o_data$Dead)
+
+```
+     
+
+## A. Patient Characteristics   
+
+|
+
+|     Among all 229 patients, 154 patients have weight loss within 5% (Group 1) while 75 patients have weight loss over 5% (Group 2). Approximately 50% of patients in Group 2 have elevated LDH while only 40% of patients in Group 2 have elevated LDH. In addition, poor performance (ECOG 3-4) was observed in 18.7% of the patients in Group 2 while only observed in 10.4% of Group 1. Also, more patients in extensive stage were in Group 2 compared to Group 1 (76.0% vs. 57.8%). These data implied that higher amount of weight loss might be related to a more severe SCLC condition or a poorer body condition in general. The entire data is summarized in table 1.
+
+```{r, echo=FALSE, message = F, warning=FALSE}
+# patient characteristics
+
+patient <- subset(o_data, select = c(Stage, Gender, Age, Smoking, LDHcat, PS, WLcat, Brain_mets, Liver_mets, Adrenal_met, Bone_mets, Pl_effusion))
+
+patient$Stage <- factor(patient$Stage, levels = c(1, 2), labels=c("Limited Stage", "Extensive Stage"))
+
+patient$Gender <- factor(patient$Gender, levels = c(1, 2), labels=c("Male", "Female"))
+
+patient$Smoking <- factor(patient$Smoking, levels = c(0, 1, 2), labels=c("Never", "Current", "Former"))
+
+patient$LDH <- factor(patient$LDHcat, levels = c(0, 1, 2), labels=c("Missing", "Normal", "Elevated"))
+
+patient$PS <- factor(patient$PS)
+levels(patient$PS) <- c(0, 0, 2, 3, 3)
+
+
+patient$PS <- factor(patient$PS, labels = c("0-1", "2", "3-4"))
+patient$WeightLoss <- factor(patient$WLcat, levels = c(1, 2), labels=c("WL < 5%", "WL > 5%"))
+
+
+
+patient$Brain_metastasis <- factor(patient$Brain_mets, levels = c(0, 1), labels=c("No", "Yes"))
+patient$Liver_metastasis <- factor(patient$Liver_mets, levels = c(0, 1), labels=c("No", "Yes"))
+patient$Adrenal_metastasis <- factor(patient$Adrenal_met, levels = c(0, 1), labels=c("No", "Yes"))
+patient$Bone_metastasis <- factor(patient$Bone_mets, levels = c(0, 1), labels=c("No", "Yes"))
+patient$Pl_effusion <- factor(patient$Pl_effusion, levels = c(0, 1), labels=c("No", "Yes"))
+
+label(patient$PS) <- "ECOG PS"
+label(patient$Brain_metastasis) <- "Brain Metastasis"
+label(patient$Liver_metastasis) <- "Liver Metastasis"
+label(patient$Adrenal_metastasis) <- "Adrenal Metastasis"
+label(patient$Bone_metastasis) <- "Bone Metastasis"
+label(patient$Pl_effusion) <- "Pleural Effusion"
+
+x <- table1::table1(~Gender + Age + Smoking + LDH + PS +Stage + Brain_metastasis + Liver_metastasis + Adrenal_metastasis + Bone_metastasis + Pl_effusion | WeightLoss, data = patient, na.rm = TRUE, digits = 1, format.number = TRUE, caption = "Patient Characteristics.", footnote = "LDH = lactate dehydrogenase, PS = performance status.")
+t1kable(x)
+```
+
+## B. Treatment Received
+
+
+|     Patients in group 1 received more number of cycles of treatments, with 57.1% of patients in Group 1 receiving 5-6 cycles of treatment while only 42.7% of patients in Group 2 receiving 5-6 cycles. Furthermore, for the thoracic radiation treatment and PCI treatment, more patients in Group 1 were treated. In particular, 46.1% of patients in Group 1 is not treated with any radiation while 61.3% of patients in Group 2 is not treated with any radiation. In addition, patients in Group 1 were treated with higher radiation dose, with 27.9% of Group 1 undergoing 50Gy/25 fraction radiation dose while only 13.3% of Group 2 undergoing the same dosage. In terms of the response rate, more people in Group 1 partially (64.3% vs. 54.7%) or fully (11.0% vs. 0%) response to the treatment. Further investigation is needed to understand the causal relationship between the treatment received and the weight loss rate. That is, whether the doctors were more reluctant to provide treatment or stronger dose since the patients were losing too much weight, or whether the patients were losing more weight since they did not receive enough treatment that they need. The entire data is summarized in table 2.  
+
+
+```{r, echo=FALSE, message = F, warning=FALSE}
+
+#treatment received
+# how to combine multiple level
+treatment <- subset(o_data, select = c(Chemo_Prot, number_cycle, Response, Thoracic_R, RT_dose, PCI_reason, WLcat, Stage))
+
+treatment$Stage <- factor(treatment$Stage, levels = c(1, 2), labels=c("Limited Stage", "Extensive Stage"))
+
+treatment$WeightLoss <- factor(treatment$WLcat, levels = c(1, 2), labels=c("WL < 5%", "WL > 5%"))
+
+treatment$Chemotherapy <- factor(treatment$Chemo_Prot, levels = c(1, 2, 3), labels=c("cisplatin + etoposide", "carboplatin + etoposide", "oral etoposide"))
+
+treatment$number_cycle <- factor(treatment$number_cycle)
+levels(treatment$number_cycle) <- c(1, 1, 1, 4, 5, 5, 5)
+treatment$number_cycle <- factor(treatment$number_cycle, labels = c("<4", "4", "5-6"))
+
+
+
+
+
+treatment$Response <- factor(treatment$Response, levels = c(0, 1, 2, 3), labels=c("progressive disease", "stable disease", "partial response", "complete response"))
+
+
+treatment$Thoracic_R <- factor(treatment$Thoracic_R)
+levels(treatment$Thoracic_R) <- c(0, 1, 1, 3, 3, 3, 3, 7, 8)
+treatment$Thoracic_R <- factor(treatment$Thoracic_R,  labels=c("none", "C1 or 2 chemo", "C3 or higher","post chemotherapy","pre chemotherapy"))
+
+treatment$Radiation_Dose <- factor(treatment$RT_dose, levels = c(0, 1, 2, 3, 4), labels=c("no radiation", "50 Gy/25 fraction", "45 Gy/30 fractions BID", "40 Gy/15 fractions", "palliative radiation only"))
+
+treatment$PCI <- factor(treatment$PCI_reason, levels = c(0, 1, 2, 3, 4, 5), labels=c("no PCI, patient choice", "no PCI, physical advise", "brain mets, no PCI", "no PCI, other health issues", "Yes", "no PCI, disease progression"))
+
+label(treatment$number_cycle) <- "Number of Cycles"
+label(treatment$Thoracic_R) <- "Thoracic Radiation"
+label(treatment$Radiation_Dose) <- "Radiation Dose"
+
+table1::table1(~Chemotherapy + number_cycle + Response+ Thoracic_R + Radiation_Dose+PCI | WeightLoss, data = treatment, na.rm = TRUE, digits = 1, format.number = TRUE, caption = "Summary of treatments received.", footnote = "C = cycle, GY = Gray, BID = twice daily, PCI = prophylactic.")
+```
+     
+## C. Patterns of Relapse and Outcomes of Treatment
+
+|     In general, the relapse rate between the two groups are roughly equal for total relapse and thoracic relapse. The CNS relapse rate is higher for Group 1 than for Group 2 (24.7% vs. 16.0%). However, the mean of the overall survival time for Group 1 is much more higher than Group 2, with the mean OS for group 1 equal to 20 months while the mean OS for group 2 equal to 10 months. The mean time for PFS in both groups are roughly equal (both 10 months). It might be that since the patients with more weight loss have worse body conditions or have more severe SCLC condition, they have a shorter survival time.  The entire data is summarized in table 3.
+|
+
+```{r, echo=FALSE, message = F, warning=FALSE}
+relapse <- subset(o_data, select = c(Stage, Relapse, Relapse_Pattern, Dead, thorrel, OS, PFS, CNSrelapse, TTRelapse_CNS, TTRelapse, WLcat))
+
+relapse$Stage <- factor(relapse$Stage, levels = c(1, 2), labels=c("Limited Stage", "Extensive Stage"))
+
+relapse$Relapse <- factor(relapse$Relapse, levels = c(0, 1), labels=c("No", "Yes"))
+label(relapse$Relapse) <- "Total Relapse"
+
+relapse$Relapse_Pattern <- factor(relapse$Relapse_Pattern)
+levels(relapse$Relapse_Pattern) <- c(0, 1, 2, 3, 4, 5, 5, 5)
+relapse$Relapse_Pattern <- factor(relapse$Relapse_Pattern, labels = c("No Relapse", "Thoracic relapse", "Extra-thoracic relapse", "CNS relapse", "Combined systemic", "Combined systemic + CNS"))
+label(relapse$Relapse_Pattern) <- "Pattern of Relapse"
+
+relapse$thorrel <- factor(relapse$thorrel, levels = c(0, 1), labels=c("No", "Yes"))
+
+# th relapse time coding
+for (i in 1:229){
+  if (relapse$thorrel[i] == "Yes"){
+    relapse$threlapse[i] <- relapse$TTRelapse[i]
+  }else{
+    relapse$threlapse[i] <- NA
+  }
+}
+
+label(relapse$thorrel) <- "Thoracic Relapse"
+
+relapse$CNSrelapse <- factor(relapse$CNSrelapse)
+levels(relapse$CNSrelapse) <- c(0, 1, 1)
+relapse$CNSrelapse <- factor(relapse$CNSrelapse, levels = c(0, 1), labels=c("No", "Yes"))
+label(relapse$CNSrelapse) <- "CNS Relapse"
+
+relapse$Dead <- factor(relapse$Dead, labels = c("No", "Yes")) 
+
+
+relapse$WLcat <- factor(relapse$WLcat, levels = c(1, 2), labels=c("WL < 5%", "WL > 5%"))
+
+table1::table1(~Relapse + Relapse_Pattern + CNSrelapse + thorrel+ Dead + OS + PFS | WLcat, data = relapse, na.rm = TRUE, digits = 1, format.number = TRUE, caption = "Patterns of relapse and outcomes of treatment.", footnote = "CNS = central nervous system, Combined systemic = thoracic plus extrathoracic")
+```
+
+## D. Overall & Progression Free Survival Curves
+|
+
+
+|     Patients in Group 1 have higher survival rates than patients in Group 2, which is demonstrated in figure 1. Here, the p-value is 0.0095, meaning there is only a little possibility that the differences of survival time between the two groups is due to chance. In other words, we could conclude that we are quite confident that patients in Group 1 do have higher survival rates at any given time point. 
+|
+|
+
+```{r, echo=FALSE, message = F, warning=FALSE}
+# creating survival object and model
+s <- Surv(o_data$OS, o_data$Dead)
+sweight <- survfit(s~o_data$WLcat, data = o_data)
+```
+
+```{r, echo=FALSE, message = F, warning=FALSE}
+ggsurvplot(
+  fit = sweight, conf.int = T, pval = T, risk.table = T, legend.labs = c("WL<5%", "WL>5%"), legend.title = "Weight Loss", data = o_data, xlab = "Overall Survival (months)", ylab = "Cum Survival", 
+    title = "Figure 1. Kaplan-Meier overall survival curves", risk.table.height = 0.3, font.title = c(10, "bold")) 
+```
+
+
+|
+|
+|
+
+
+|     In figure 2, it is evident that patients in Group 1 have higher progression free survival rates than patients in Group 2. The p-value is 0.00093, and we could conclude that we are quite confident that patients in Group 1 do have higher progression free survival rates at any given time point and that the difference is unlikely to due to chance. 
+|
+|
+
+
+
+```{r, echo=FALSE, message = F, warning=FALSE}
+# for progression free survival
+for (i in 1:229){
+  if (o_data$Relapse[i] == 1 | o_data$Dead[i] == 1){
+    o_data$progress[i] <- 1
+  }else{
+    o_data$progress[i] <- 0
+  }
+}
+```
+
+```{r, echo=FALSE, message = F, warning=FALSE}
+# progression free survival
+# creating survival object and model
+s <- Surv(o_data$PFS, o_data$progress)
+sweight <- survfit(s~o_data$WLcat, data = o_data)
+```
+
+```{r, echo=FALSE, message = F, warning=FALSE}
+ggsurvplot(
+  fit = sweight, conf.int = T, pval = T, risk.table = T, legend.labs = c("WL<5%", "WL>5%"), legend.title = "Weight Loss", data = o_data, xlab = "Progression Free Survival (months)", ylab = "Cum Survival", 
+    title = "Figure 2. Kaplan-Meier progression free survival curves", risk.table.height = 0.3, font.title = c(10, "bold")) 
+```
+
+
+
+# VI. Conclusions
+
+|     This paper compared patients with more than 5% weight loss to patients with less than 5% weight loss, with the hypothesis being that patients with a higher weight loss might have a shorter overall and progression free survival and a higher rate of both thoracic and CNS relapse. Basic patients characteristics, treatments received, relapse pattern were compared, and were summarized by frequency tables. Overall and progression free survival time was also compared by the survival curve. The results confirmed the hypothesis that patients with higher weight loss have shorter overall and progression free survival time. However, the results showed that thoracic relapse is similar between the two groups and patients with lower percentage of weight loss have higher CNS relapse rate. The data from the patients characteristic and treatment tables showed that patients with higher weight loss do have worse body condition, received less number of treatments, and received lower dose and intensity of treatment. Thus, the lower CNS relapse rate of patients with weight loss >5% might be due to the fact that they are not treated in the first place so that they will not experience a "relapse".  
+
+|     From the analysis and results, it could be concluded that there is a relationship between weight loss and both body condition and survival time, but there is no strong relationship between weight loss and relapse pattern. In particular, patients with higher weight loss have worse body condition and have a shorter survival time. However, this relationship is only a correlation instead of causation. In other words, we do not know if body weight reduction leads to less ideal body condition and less survival time. Furthermore, we also do not know whether weight loss influence the doctors' treatment decision, or whether the treatment leads to a different pattern of weight loss. To address these limitations, further investigation should be made in order to establish a clear causal relationship and to potentially make better treatment decisions based on the patients' body condition.  
+
+
+# VII. Bibliography
+
+|
+| Ellis, P. M., Swaminath, A., & Pond, G. R. (2021). Patterns of Relapse in Small |     Cell Lung Cancer: Competing Risks of Thoracic versus CNS Relapse. Current  |     Oncology, 28(4), 2778–2788. https://doi.org/10.3390/curroncol28040243
+
+|
+
+| Weight Loss. (2012, February 13). Cancer.net. https://www.cancer.net/coping-with-cancer/physical-emotional-and-social-effects-cancer/managing-physical-side-effects/weight-loss
+
+
